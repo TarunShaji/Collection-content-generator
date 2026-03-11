@@ -1,0 +1,21 @@
+{
+  "name": "backend",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch index.ts",
+    "check": "biome check --write .",
+    "check:ci": "biome check ."
+  },
+  "dependencies": {
+    "hono": "^4.11.9",
+    "@hono/node-server": "^1.14.1",
+    "@anthropic-ai/sdk": "^0.74.0",
+    "playwright": "^1.52.0",
+    "zod": "^3.24.0",
+    "@hono/zod-validator": "^0.7.6"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "~5.9.3"
+  }
+}

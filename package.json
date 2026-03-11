@@ -1,0 +1,5 @@
+{
+  "name": "collection-seo-generator",
+  "private": true,
+  "workspaces": ["backend", "frontend"]
+}
