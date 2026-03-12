@@ -1,72 +1,61 @@
 # Collection SEO Generator
 
-An AI-powered SEO content generator designed specifically for e-commerce collection pages. This tool automates the process of crawling product information and generating high-quality, SEO-optimized descriptions and titles using advanced AI.
+An AI-powered SEO content engine designed to automate the generation of high-converting descriptions and titles for e-commerce collection pages. By combining intelligent web crawling with advanced LLM orchestration, it transforms raw product listings into optimized, brand-aligned marketing copy.
 
-## 🚀 Key Features
+## ✨ Core Functionalities
 
--   **Deep Product Crawling**: Automatically extracts product descriptions from collection pages using Playwright.
--   **AI-Powered SEO Generation**: Leverages Anthropic's Claude to create compelling, keyword-rich content.
--   **Content Humanization**: Refines AI-generated text to ensure it sounds natural and aligns with brand guidelines.
--   **Real-time Progress Tracking**: Uses Server-Sent Events (SSE) to provide live updates during the crawling and generation process.
--   **Interactive Refinement**: Allows users to provide feedback and refine generated content iteratively.
+-   **Deep Ingestion Pipeline**: Automatically crawls collection pages to discover product links and extracts deep-level product descriptions using **Playwright**.
+-   **SSE Real-time Streaming**: Provides a live, interactive experience by streaming crawling progress and AI generation stages directly to the browser via **Server-Sent Events**.
+-   **Brand-Aware Humanization**: Uses an iterative "Humanization" pass to refine raw SEO drafts, ensuring the final content reflects specific **Brand Guidelines** and maintains a natural tone.
+-   **Contextual Refinement**: An interactive feedback loop allows users to chat with the AI to refine generated content based on specific critique, incorporating product-level context.
+-   **SEO Optimization Engine**: Leverages Claude 3.5/3.7 to strategically place keywords while maintaining high readability and conversion-focused messaging.
 
 ## 🏗️ Architecture
 
-The project is organized as a monorepo:
+The project is built as a unified monorepo for seamless full-stack development.
 
--   **/backend**: A Hono-based server running on Bun. It handles web scraping, AI communication, and content logic.
--   **/frontend**: A Vite + React application styled with Tailwind CSS, providing a modern dashboard for content generation.
+-   **Backend**: A high-performance [Hono](https://hono.dev/) server running on the [Bun](https://bun.sh/) runtime.
+-   **Frontend**: A modern [React 19](https://react.dev/) dashboard powered by [Vite](https://vitejs.dev/) and [Tailwind CSS 4](https://tailwindcss.com/).
 
-## 🛠️ Tech Stack
+> [!NOTE]
+> For a detailed breakdown of the project structure, internal clients, and technical implementation, please refer to the **[DEV.md](./DEV.md)**.
+
+## 🛠️ Tech Stack & Dependencies
 
 ### Backend
--   **Runtime**: [Bun](https://bun.sh/)
--   **Web Framework**: [Hono](https://hono.dev/)
--   **Web Scraping**: [Playwright](https://playwright.dev/)
--   **AI Integration**: [Anthropic Claude SDK](https://github.com/anthropics/anthropic-sdk-typescript)
--   **Validation**: [Zod](https://zod.dev/)
+-   **Runtime**: [Bun](https://bun.sh/) - For ultra-fast execution and native TypeScript support.
+-   **Framework**: [Hono](https://hono.dev/) - A lightweight, standard-based web framework.
+-   **Crawl Engine**: [Playwright](https://playwright.dev/) - Headless browser automation for accurate data extraction.
+-   **AI Core**: [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript) - Orchestrating Claude for generation and humanization.
+-   **Validation**: [Zod](https://zod.dev/) - Type-safe schema validation for all API boundaries.
 
 ### Frontend
--   **Framework**: [React 19](https://react.dev/)
--   **Build Tool**: [Vite](https://vitejs.dev/)
--   **Styling**: [Tailwind CSS 4](https://tailwindcss.com/)
--   **Icons**: [Lucide React](https://lucide.dev/)
+-   **Library**: [React 19](https://react.dev/) - Utilizing the latest Concurrent Mode and hooks for a fluid UI.
+-   **Styling**: [Tailwind CSS 4](https://tailwindcss.com/) - Utilizing zero-runtime CSS with modern variables.
+-   **Icons**: [Lucide React](https://lucide.dev/) - Beautiful, consistent iconography.
+-   **State Management**: React Hooks + Local Storage for form persistence.
 
 ## 🚦 Getting Started
 
 ### Prerequisites
--   [Bun](https://bun.sh/) installed locally.
--   An Anthropic API Key.
+-   [Bun](https://bun.sh/) installed.
+-   An [Anthropic API Key](https://console.anthropic.com/).
 
-### Setup
+### Setup & Run
 
-1.  **Clone the repository**:
+1.  **Configure Environment**:
+    -   `cp backend/.env.example backend/.env`
+    -   Add your `ANTHROPIC_API_KEY` to `backend/.env`.
+
+2.  **Install & Start**:
     ```bash
-    git clone <repository-url>
-    cd collection-page-content
-    ```
-
-2.  **Configure Environment Variables**:
-    -   Copy `backend/.env.example` to `backend/.env` and add your `ANTHROPIC_API_KEY`.
-
-3.  **Install Dependencies**:
-    ```bash
-    # Install root dependencies
     bun install
+    # Start Backend (Port 8000)
+    cd backend && bun run dev
+    # Start Frontend (Port 5173)
+    cd frontend && bun run dev
     ```
 
-4.  **Run the Application**:
-    -   **Backend**: 
-        ```bash
-        cd backend
-        bun run dev
-        ```
-    -   **Frontend**:
-        ```bash
-        cd frontend
-        bun run dev
-        ```
+---
 
-## 📄 License
-
-[Insert License Information Here]
+*Part of the `collection-seo-generator` internal tools suite.*
