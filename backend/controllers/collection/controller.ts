@@ -4,6 +4,19 @@ import type { GeneratedContent, HumanizedContent } from "@/common/clients/ai/IAI
 
 type SendEvent = (type: string, data: unknown) => Promise<void>;
 
+function contentTotalLength(content: GeneratedContent): number {
+	return [
+		content.h1,
+		content.intro,
+		content.section1.h2,
+		content.section1.content,
+		content.section2.h2,
+		content.section2.content,
+	]
+		.map((v) => v.length)
+		.reduce((a, b) => a + b, 0);
+}
+
 export async function generateCollectionContent(
 	collectionUrl: string,
 	keywords: string[],
@@ -106,7 +119,9 @@ export async function generateCollectionContent(
 
 		console.info("[CollectionController] Draft generation complete", {
 			durationMs: Math.round(performance.now() - draftStartTime),
-			descriptionLength: draft.collectionDescription.length,
+			totalLength: contentTotalLength(draft),
+			h1Length: draft.h1.length,
+			introLength: draft.intro.length,
 		});
 
 		await sendEvent("draft", { draft });
@@ -134,7 +149,7 @@ export async function generateCollectionContent(
 
 		console.info("[CollectionController] Humanization complete", {
 			durationMs: Math.round(performance.now() - humanizeStartTime),
-			descriptionLength: humanized.collectionDescription.length,
+			totalLength: contentTotalLength(humanized),
 			changesCount: humanized.changes.length,
 		});
 
@@ -170,7 +185,7 @@ export async function regenerateHumanized(
 }
 
 export async function refineContent(
-	currentContent: string,
+	currentContent: GeneratedContent,
 	feedback: string,
 	keywords: string[],
 	brandGuidelines: string,

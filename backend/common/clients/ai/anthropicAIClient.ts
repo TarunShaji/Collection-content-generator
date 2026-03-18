@@ -28,6 +28,64 @@ class AnthropicAIClient implements IAIClient {
 		}
 	}
 
+	private contentTotalLength(content: GeneratedContent): number {
+		return [
+			content.h1,
+			content.intro,
+			content.section1.h2,
+			content.section1.content,
+			content.section2.h2,
+			content.section2.content,
+		]
+			.map((v) => v.length)
+			.reduce((a, b) => a + b, 0);
+	}
+
+	private parseJSON<T>(text: string): T {
+		const cleaned = text
+			.replace(/```json\s*/g, "")
+			.replace(/```\s*/g, "")
+			.trim();
+		return JSON.parse(cleaned) as T;
+	}
+
+	private assertGeneratedContentShape(value: unknown): asserts value is GeneratedContent {
+		if (!value || typeof value !== "object") throw new Error("AI response is not an object");
+		const obj = value as Record<string, unknown>;
+
+		const hasString = (key: string) => typeof obj[key] === "string" && (obj[key] as string).trim().length > 0;
+		if (!hasString("h1")) throw new Error("AI response missing non-empty h1");
+		if (!hasString("intro")) throw new Error("AI response missing non-empty intro");
+
+		const section1 = obj.section1;
+		if (!section1 || typeof section1 !== "object") throw new Error("AI response missing section1");
+		const section1Obj = section1 as Record<string, unknown>;
+		if (typeof section1Obj.h2 !== "string" || section1Obj.h2.trim().length === 0) {
+			throw new Error("AI response missing non-empty section1.h2");
+		}
+		if (typeof section1Obj.content !== "string" || section1Obj.content.trim().length === 0) {
+			throw new Error("AI response missing non-empty section1.content");
+		}
+
+		const section2 = obj.section2;
+		if (!section2 || typeof section2 !== "object") throw new Error("AI response missing section2");
+		const section2Obj = section2 as Record<string, unknown>;
+		if (typeof section2Obj.h2 !== "string" || section2Obj.h2.trim().length === 0) {
+			throw new Error("AI response missing non-empty section2.h2");
+		}
+		if (typeof section2Obj.content !== "string" || section2Obj.content.trim().length === 0) {
+			throw new Error("AI response missing non-empty section2.content");
+		}
+	}
+
+	private assertHumanizedContentShape(value: unknown): asserts value is HumanizedContent {
+		this.assertGeneratedContentShape(value);
+		const obj = value as Record<string, unknown>;
+		if (!Array.isArray(obj.changes) || obj.changes.some((c) => typeof c !== "string")) {
+			throw new Error("AI response missing valid changes array");
+		}
+	}
+
 	async generateDraft(
 		productDescriptions: string[],
 		keywords: string[],
@@ -38,7 +96,9 @@ class AnthropicAIClient implements IAIClient {
 			.map((d, i) => `Product ${i + 1}:\n${d}`)
 			.join("\n\n---\n\n");
 
-		const prompt = `You are an expert SEO copywriter for ecommerce. Your task is to write a collection page description based on the product descriptions below.
+		const prompt = `You are an expert ecommerce SEO strategist and copywriter.
+
+Your task: generate structured SEO content for a collection page from product descriptions.
 
 ## Product Descriptions from this Collection:
 ${descriptionsText}
@@ -49,20 +109,24 @@ ${keywords.join(", ")}
 ## Brand Guidelines:
 ${brandGuidelines}
 
-## Instructions:
-1. Analyze ALL the product descriptions to understand what this collection is about, the common themes, product types, and language used.
-2. Write a collection page description that is between 600 and 800 characters (including spaces). COUNT CAREFULLY — this is characters, not words.
-3. Naturally incorporate the target keywords without keyword stuffing.
-4. Follow the brand guidelines for tone and voice.
-5. SEO best practices:
-   - Front-load the primary keyword (first keyword in the list) near the beginning
-   - Include a clear value proposition
-   - Use natural language
-   - Do NOT copy any individual product description — synthesize the overall collection theme
+## Structure Requirements:
+- h1: collection SEO title, 40-70 characters.
+- intro: 1 strong opening paragraph, 220-360 characters.
+- section1.h2: subheading focused on value/theme cluster 1.
+- section1.content: 1 paragraph, 180-320 characters.
+- section2.h2: subheading focused on value/theme cluster 2.
+- section2.content: 1 paragraph, 180-320 characters.
+
+## Quality Rules:
+1. Synthesize across all products; do not copy one product verbatim.
+2. Place primary keyword naturally in h1 or intro.
+3. Use natural SEO language with clear value proposition.
+4. Follow brand voice strictly.
+5. Keep output concise and publication-ready.
 
 ## Output Format:
-Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
-{"collectionDescription": "your 600-800 character description here"}`;
+Respond with ONLY valid JSON (no markdown, no code fences) in this exact shape:
+{"h1":"...","intro":"...","section1":{"h2":"...","content":"..."},"section2":{"h2":"...","content":"..."}}`;
 
 		this.log("info", "Starting draft generation", {
 			productCount: productDescriptions.length,
@@ -72,18 +136,21 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 
 		const response = await this.client.messages.create({
 			model: "claude-haiku-4-5-20251001",
-			max_tokens: 1024,
+			max_tokens: 1200,
 			messages: [{ role: "user", content: prompt }],
 		});
 
 		const duration = performance.now() - startTime;
-		const text =
-			response.content[0].type === "text" ? response.content[0].text : "";
-		const result = this.parseJSON<GeneratedContent>(text);
+		const text = response.content[0].type === "text" ? response.content[0].text : "";
+		const parsed = this.parseJSON<unknown>(text);
+		this.assertGeneratedContentShape(parsed);
+		const result = parsed;
 
 		this.log("info", "Draft generation completed", {
 			durationMs: Math.round(duration),
-			responseLength: result.collectionDescription.length,
+			totalLength: this.contentTotalLength(result),
+			h1Length: result.h1.length,
+			introLength: result.intro.length,
 		});
 
 		return result;
@@ -95,60 +162,49 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 		brandGuidelines: string,
 	): Promise<HumanizedContent> {
 		const startTime = performance.now();
-		const prompt = `You are a senior ecommerce copywriter who has written for top DTC brands for 10+ years. Your writing is natural, confident, and impossible to distinguish from a skilled human writer.
+		const prompt = `You are a senior ecommerce copywriter. Rewrite the structured SEO content below to sound fully human, natural, and brand-authentic while preserving structure.
 
-## Draft to Humanize:
-Collection Description: ${draft.collectionDescription}
+## Draft to Humanize (JSON):
+${JSON.stringify(draft, null, 2)}
 
-## Target Keywords (must be preserved):
+## Target Keywords (must remain naturally present across the output):
 ${keywords.join(", ")}
 
-## Brand Guidelines (must be followed):
+## Brand Guidelines:
 ${brandGuidelines}
 
-## Humanization Instructions:
-Rewrite the content to sound like an experienced ecommerce copywriter wrote it, NOT an AI. Specifically:
-
-1. REMOVE these AI-typical patterns — never use these words/phrases:
-   "elevate", "seamless", "curated", "unlock", "designed to", "whether you're", "look no further", "takes it to the next level", "game-changer", "transform", "discover", "journey", "explore our", "dive into", "crafted", "redefine", "empower", "streamline"
-
-2. VARY sentence length — mix short punchy sentences with longer ones. Avoid predictable rhythm.
-
-3. USE conversational, confident language — write like a brand expert, not a marketing bot.
-
-4. ADD subtle personality and specificity.
-
-5. PRESERVE all target keywords in natural positions.
-
-6. KEEP the brand guidelines tone intact.
-
-7. STAY strictly within 600-800 characters (including spaces). COUNT CAREFULLY.
-
-8. Track every change you made — list them briefly.
+## Humanization Rules:
+1. Keep exact JSON structure and keys: h1, intro, section1{h2,content}, section2{h2,content}.
+2. Improve flow, cadence, specificity, and readability.
+3. Remove robotic phrasing and generic AI tone.
+4. Preserve SEO intent and keyword alignment.
+5. Keep each field concise and similar in length to the draft.
+6. Track key edits in a short changes array (3-8 items).
 
 ## Output Format:
-Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
-{"collectionDescription": "your humanized 600-800 char description", "changes": ["change 1", "change 2", "change 3"]}`;
+Respond with ONLY valid JSON (no markdown, no code fences):
+{"h1":"...","intro":"...","section1":{"h2":"...","content":"..."},"section2":{"h2":"...","content":"..."},"changes":["..."]}`;
 
 		this.log("info", "Starting humanization", {
-			draftLength: draft.collectionDescription.length,
+			draftTotalLength: this.contentTotalLength(draft),
 			promptLength: prompt.length,
 		});
 
 		const response = await this.client.messages.create({
 			model: "claude-sonnet-4-20250514",
-			max_tokens: 1024,
+			max_tokens: 1200,
 			messages: [{ role: "user", content: prompt }],
 		});
 
 		const duration = performance.now() - startTime;
-		const text =
-			response.content[0].type === "text" ? response.content[0].text : "";
-		const result = this.parseJSON<HumanizedContent>(text);
+		const text = response.content[0].type === "text" ? response.content[0].text : "";
+		const parsed = this.parseJSON<unknown>(text);
+		this.assertHumanizedContentShape(parsed);
+		const result = parsed;
 
 		this.log("info", "Humanization completed", {
 			durationMs: Math.round(duration),
-			responseLength: result.collectionDescription.length,
+			totalLength: this.contentTotalLength(result),
 			changesCount: result.changes.length,
 		});
 
@@ -156,7 +212,7 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 	}
 
 	async refineContent(
-		currentContent: string,
+		currentContent: GeneratedContent,
 		feedback: string,
 		keywords: string[],
 		brandGuidelines: string,
@@ -164,67 +220,58 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 	): Promise<GeneratedContent> {
 		const startTime = performance.now();
 		const descriptionsContext = productDescriptions.length > 0
-			? `\n\n## Product Descriptions for Reference:\n${productDescriptions.map((d, i) => `Product ${i + 1}: ${d.substring(0, 200)}...`).join("\n")}`
+			? `\n\n## Product Descriptions for Reference:\n${productDescriptions.map((d, i) => `Product ${i + 1}: ${d.substring(0, 240)}...`).join("\n")}`
 			: "";
 
-		const prompt = `You are a senior ecommerce copywriter. You previously wrote a collection page description, and the user has feedback. Revise the content based on their instructions.
+		const prompt = `You are a senior ecommerce copywriter updating structured collection-page SEO content.
 
-## Current Content:
-${currentContent}
+## Current Structured Content (JSON):
+${JSON.stringify(currentContent, null, 2)}
 
 ## User Feedback:
 ${feedback}
 
-## Target Keywords (must still be included):
+## Target Keywords:
 ${keywords.join(", ")}
 
 ## Brand Guidelines:
 ${brandGuidelines}${descriptionsContext}
 
 ## Instructions:
-1. Apply the user's feedback to the current content.
-2. Keep the target keywords naturally included.
-3. Follow the brand guidelines.
-4. Unless the user explicitly asks for a different length, stay within 600-800 characters (including spaces).
-5. If the user says "make it shorter", aim for 400-600 characters.
-6. If the user says "make it longer", aim for 800-1000 characters.
-7. Write naturally — no AI-sounding phrases.
+1. Apply the feedback directly.
+2. Keep exact JSON structure and keys unchanged.
+3. Preserve SEO quality and keyword naturalness.
+4. Keep tone aligned with brand guidelines.
+5. Keep each field concise and coherent with the whole page.
 
 ## Output Format:
-Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
-{"collectionDescription": "your revised description here"}`;
+Respond with ONLY valid JSON (no markdown, no code fences):
+{"h1":"...","intro":"...","section1":{"h2":"...","content":"..."},"section2":{"h2":"...","content":"..."}}`;
 
 		this.log("info", "Starting content refinement", {
 			feedback,
-			currentLength: currentContent.length,
+			currentTotalLength: this.contentTotalLength(currentContent),
 			promptLength: prompt.length,
 		});
 
 		const response = await this.client.messages.create({
 			model: "claude-sonnet-4-20250514",
-			max_tokens: 1024,
+			max_tokens: 1200,
 			messages: [{ role: "user", content: prompt }],
 		});
 
 		const duration = performance.now() - startTime;
-		const text =
-			response.content[0].type === "text" ? response.content[0].text : "";
-		const result = this.parseJSON<GeneratedContent>(text);
+		const text = response.content[0].type === "text" ? response.content[0].text : "";
+		const parsed = this.parseJSON<unknown>(text);
+		this.assertGeneratedContentShape(parsed);
+		const result = parsed;
 
 		this.log("info", "Refinement completed", {
 			durationMs: Math.round(duration),
-			responseLength: result.collectionDescription.length,
+			totalLength: this.contentTotalLength(result),
 		});
 
 		return result;
-	}
-
-	private parseJSON<T>(text: string): T {
-		const cleaned = text
-			.replace(/```json\s*/g, "")
-			.replace(/```\s*/g, "")
-			.trim();
-		return JSON.parse(cleaned) as T;
 	}
 }
 

@@ -1,8 +1,18 @@
-export interface GeneratedContent {
-	collectionDescription: string;
+export interface CollectionSEOSection {
+	h2: string;
+	content: string;
 }
 
-export interface HumanizedContent extends GeneratedContent {
+export interface CollectionSEOContent {
+	h1: string;
+	intro: string;
+	section1: CollectionSEOSection;
+	section2: CollectionSEOSection;
+}
+
+export interface GeneratedContent extends CollectionSEOContent {}
+
+export interface HumanizedContent extends CollectionSEOContent {
 	changes: string[];
 }
 

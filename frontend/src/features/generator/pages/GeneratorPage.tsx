@@ -180,7 +180,12 @@ export function GeneratorPage() {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
-					currentContent: humanized.collectionDescription,
+					currentContent: {
+						h1: humanized.h1,
+						intro: humanized.intro,
+						section1: humanized.section1,
+						section2: humanized.section2,
+					},
 					feedback,
 					keywords: formDataRef.current.keywords,
 					brandGuidelines: formDataRef.current.brandGuidelines,
@@ -196,7 +201,10 @@ export function GeneratorPage() {
 			const result = await response.json();
 			const refined = result.data.refined;
 			setHumanized({
-				collectionDescription: refined.collectionDescription,
+				h1: refined.h1,
+				intro: refined.intro,
+				section1: refined.section1,
+				section2: refined.section2,
 				changes: [`Refined based on feedback: "${feedback}"`],
 			});
 		} catch (err) {

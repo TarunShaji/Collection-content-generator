@@ -216,10 +216,8 @@ class ScraperClient implements IScraperClient {
 					/\/product\//.test(fullUrl) ||
 					/\/p\//.test(fullUrl) ||
 					/\/dp\//.test(fullUrl);
-				const isExcluded =
-					/\/(collections|categories|cart|account|search|pages|blogs)\//i.test(fullUrl);
 
-				if (isProduct && !isExcluded) {
+				if (isProduct) {
 					const title = anchor.textContent?.trim() || undefined;
 					links.push({ url: fullUrl, title });
 				}
