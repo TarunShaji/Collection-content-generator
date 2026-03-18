@@ -10,6 +10,12 @@ export async function generateCollectionContent(
 	brandGuidelines: string,
 	sendEvent: SendEvent,
 ): Promise<void> {
+	console.info("[CollectionController] Generate request started", {
+		collectionUrl,
+		keywordsCount: keywords.length,
+		hasBrandGuidelines: Boolean(brandGuidelines?.trim()),
+	});
+
 	const scraper = createScraperClient();
 	const ai = createAIClient();
 
@@ -35,6 +41,11 @@ export async function generateCollectionContent(
 			return;
 		}
 
+		console.info("[CollectionController] Collection crawl complete", {
+			collectionUrl,
+			productLinksFound: productLinks.length,
+		});
+
 		await sendEvent("progress", {
 			stage: "crawling_products",
 			message: `Found ${productLinks.length} products. Starting to crawl...`,
@@ -48,6 +59,18 @@ export async function generateCollectionContent(
 
 		const successful = crawlResults.filter((r) => r.success && r.description);
 		const failed = crawlResults.filter((r) => !r.success);
+		const sourceDistribution = crawlResults.reduce<Record<string, number>>((acc, result) => {
+			const key = result.source ?? "none";
+			acc[key] = (acc[key] || 0) + 1;
+			return acc;
+		}, {});
+
+		console.info("[CollectionController] Product crawl complete", {
+			totalResults: crawlResults.length,
+			successCount: successful.length,
+			failureCount: failed.length,
+			sourceDistribution,
+		});
 
 		if (successful.length === 0) {
 			await sendEvent("error", {
@@ -79,6 +102,10 @@ export async function generateCollectionContent(
 			return;
 		}
 
+		console.info("[CollectionController] Draft generation complete", {
+			descriptionLength: draft.collectionDescription.length,
+		});
+
 		await sendEvent("draft", { draft });
 
 		// Step 4: Humanize the content
@@ -101,6 +128,11 @@ export async function generateCollectionContent(
 			return;
 		}
 
+		console.info("[CollectionController] Humanization complete", {
+			descriptionLength: humanized.collectionDescription.length,
+			changesCount: humanized.changes.length,
+		});
+
 		await sendEvent("humanized", { humanized });
 
 		// Step 5: Send complete result
@@ -110,6 +142,12 @@ export async function generateCollectionContent(
 			crawledProducts: crawlResults,
 			failedUrls: failed.map((f) => f.url),
 			totalFound: productLinks.length,
+		});
+		console.info("[CollectionController] Generate request finished", {
+			collectionUrl,
+			totalFound: productLinks.length,
+			successCount: successful.length,
+			failureCount: failed.length,
 		});
 	} finally {
 		await scraper.close();

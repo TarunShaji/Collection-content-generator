@@ -3,11 +3,14 @@ export interface ProductLink {
 	title?: string;
 }
 
+export type CrawlSource = "shopify_api" | "json_ld" | "meta" | "dom";
+
 export interface CrawlResult {
 	url: string;
 	description: string;
 	success: boolean;
 	error?: string;
+	source?: CrawlSource;
 }
 
 export interface CollectionCrawlResult {

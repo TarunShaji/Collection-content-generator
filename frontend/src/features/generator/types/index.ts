@@ -11,6 +11,7 @@ export interface CrawlResult {
 	description: string;
 	success: boolean;
 	error?: string;
+	source?: "shopify_api" | "json_ld" | "meta" | "dom";
 }
 
 export interface ProgressEvent {
