@@ -62,6 +62,66 @@ class ScraperClient implements IScraperClient {
 		return this.normalizeText(this.decodeHtmlEntities(noTags));
 	}
 
+	private parseHtmlBlocks(html: string): Array<{ tag: string; text: string }> {
+		const blockPattern = /<(h[1-6]|p|li|div)[^>]*>([\s\S]*?)<\/\1>/gi;
+		const blocks: Array<{ tag: string; text: string }> = [];
+		let match: RegExpExecArray | null;
+
+		while ((match = blockPattern.exec(html)) !== null) {
+			const tag = match[1].toLowerCase();
+			const inner = this.normalizeText(this.decodeHtmlEntities(match[2].replace(/<[^>]+>/g, " ")));
+			if (inner.length > 0) blocks.push({ tag, text: inner });
+		}
+
+		return blocks;
+	}
+
+	private isStructuralBoundary(text: string): boolean {
+		const boundaries = [
+			/^(product[\s-]details|standard\s+faqs|product[\s-]specific\s+faqs)/i,
+			/^about\s+[A-Z]{2}/i,
+			/^(shipping|returns?|refund)\s+(policy|info|information)/i,
+			/^(fit|fabric|features)[,\s+&]/i,
+			/^(size\s+&?\s*fit|size\s+chart)/i,
+			/^(care\s+instructions|how\s+to\s+care)/i,
+			/^(ingredients|nutrition\s+facts)/i,
+			/^(shipping|delivery|returns?)\s*$/i,
+			/^q:\s/i,
+			/^#{2,}\s/,
+			/\d+\s*%\s*(cotton|polyester|spandex|nylon|wool|linen)/i,
+		];
+		return boundaries.some((b) => b.test(text));
+	}
+
+	private extractLeadDescription(bodyHtml: string): string | null {
+		const blocks = this.parseHtmlBlocks(bodyHtml);
+		const collected: string[] = [];
+
+		for (const block of blocks) {
+			// Section headings are labels; avoid mixing them into product body copy.
+			if (block.tag.match(/^h[1-6]$/)) continue;
+
+			const text = block.text;
+			if (!text || text.length < 5) continue;
+
+			if (this.isStructuralBoundary(text)) break;
+
+			collected.push(text);
+
+			// Hard cap in case the page has no clear structural boundary.
+			if (collected.join(" ").length > 600) break;
+		}
+
+		const result = collected.join(" ").trim();
+		this.log("debug", "Shopify lead extraction summary", {
+			blocksCount: blocks.length,
+			collectedBlocks: collected.length,
+			resultLength: result.length,
+		});
+
+		return result.length >= 20 ? result : null;
+	}
+
 	private validateDescriptionCandidate(text: string): { valid: boolean; reason?: string } {
 		if (!text) return { valid: false, reason: "empty" };
 		if (text.length < 20) return { valid: false, reason: "too_short" };
@@ -325,22 +385,17 @@ class ScraperClient implements IScraperClient {
 				return null;
 			}
 
-			const description = this.stripHtml(bodyHtml);
-			const validation = this.validateDescriptionCandidate(description);
-			if (!validation.valid) {
-				this.log("warn", "Rejected Shopify API description candidate", {
-					jsonUrl,
-					reason: validation.reason,
-					length: description.length,
-				});
+			const lead = this.extractLeadDescription(bodyHtml);
+			if (!lead) {
+				this.log("warn", "Shopify API body_html yielded no lead description", { jsonUrl });
 				return null;
 			}
 
 			this.log("info", "Shopify API extraction succeeded", {
 				jsonUrl,
-				length: description.length,
+				length: lead.length,
 			});
-			return description;
+			return lead;
 		} catch (err) {
 			this.log("warn", "Shopify API extraction failed", {
 				jsonUrl,
@@ -398,6 +453,13 @@ class ScraperClient implements IScraperClient {
 					for (const item of items) {
 						if (!item || typeof item !== "object") continue;
 						const node = item as Record<string, unknown>;
+
+						this.log("debug", "JSON-LD node type found", {
+							url,
+							blockIndex: i,
+							type: node["@type"] ?? "missing",
+						});
+
 						if (!this.hasProductType(node)) continue;
 
 						const description = typeof node.description === "string" ? this.normalizeText(node.description) : "";
