@@ -9,11 +9,31 @@ class AnthropicAIClient implements IAIClient {
 		this.client = new Anthropic({ apiKey: settings.anthropic.apiKey });
 	}
 
+	private log(level: "info" | "warn" | "error" | "debug", message: string, context?: Record<string, unknown>): void {
+		const payload = context ? ` ${JSON.stringify(context)}` : "";
+		const line = `[AnthropicAIClient] ${message}${payload}`;
+
+		switch (level) {
+			case "warn":
+				console.warn(line);
+				break;
+			case "error":
+				console.error(line);
+				break;
+			case "debug":
+				console.debug(line);
+				break;
+			default:
+				console.info(line);
+		}
+	}
+
 	async generateDraft(
 		productDescriptions: string[],
 		keywords: string[],
 		brandGuidelines: string,
 	): Promise<GeneratedContent> {
+		const startTime = performance.now();
 		const descriptionsText = productDescriptions
 			.map((d, i) => `Product ${i + 1}:\n${d}`)
 			.join("\n\n---\n\n");
@@ -44,15 +64,29 @@ ${brandGuidelines}
 Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 {"collectionDescription": "your 600-800 character description here"}`;
 
+		this.log("info", "Starting draft generation", {
+			productCount: productDescriptions.length,
+			promptLength: prompt.length,
+			keywords: keywords.join(", "),
+		});
+
 		const response = await this.client.messages.create({
-			model: "claude-sonnet-4-20250514",
+			model: "claude-haiku-4-5-20251001",
 			max_tokens: 1024,
 			messages: [{ role: "user", content: prompt }],
 		});
 
+		const duration = performance.now() - startTime;
 		const text =
 			response.content[0].type === "text" ? response.content[0].text : "";
-		return this.parseJSON<GeneratedContent>(text);
+		const result = this.parseJSON<GeneratedContent>(text);
+
+		this.log("info", "Draft generation completed", {
+			durationMs: Math.round(duration),
+			responseLength: result.collectionDescription.length,
+		});
+
+		return result;
 	}
 
 	async humanizeContent(
@@ -60,6 +94,7 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 		keywords: string[],
 		brandGuidelines: string,
 	): Promise<HumanizedContent> {
+		const startTime = performance.now();
 		const prompt = `You are a senior ecommerce copywriter who has written for top DTC brands for 10+ years. Your writing is natural, confident, and impossible to distinguish from a skilled human writer.
 
 ## Draft to Humanize:
@@ -95,15 +130,29 @@ Rewrite the content to sound like an experienced ecommerce copywriter wrote it, 
 Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 {"collectionDescription": "your humanized 600-800 char description", "changes": ["change 1", "change 2", "change 3"]}`;
 
+		this.log("info", "Starting humanization", {
+			draftLength: draft.collectionDescription.length,
+			promptLength: prompt.length,
+		});
+
 		const response = await this.client.messages.create({
 			model: "claude-sonnet-4-20250514",
 			max_tokens: 1024,
 			messages: [{ role: "user", content: prompt }],
 		});
 
+		const duration = performance.now() - startTime;
 		const text =
 			response.content[0].type === "text" ? response.content[0].text : "";
-		return this.parseJSON<HumanizedContent>(text);
+		const result = this.parseJSON<HumanizedContent>(text);
+
+		this.log("info", "Humanization completed", {
+			durationMs: Math.round(duration),
+			responseLength: result.collectionDescription.length,
+			changesCount: result.changes.length,
+		});
+
+		return result;
 	}
 
 	async refineContent(
@@ -113,6 +162,7 @@ Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 		brandGuidelines: string,
 		productDescriptions: string[],
 	): Promise<GeneratedContent> {
+		const startTime = performance.now();
 		const descriptionsContext = productDescriptions.length > 0
 			? `\n\n## Product Descriptions for Reference:\n${productDescriptions.map((d, i) => `Product ${i + 1}: ${d.substring(0, 200)}...`).join("\n")}`
 			: "";
@@ -144,15 +194,29 @@ ${brandGuidelines}${descriptionsContext}
 Respond with ONLY valid JSON in this exact format (no markdown, no code fences):
 {"collectionDescription": "your revised description here"}`;
 
+		this.log("info", "Starting content refinement", {
+			feedback,
+			currentLength: currentContent.length,
+			promptLength: prompt.length,
+		});
+
 		const response = await this.client.messages.create({
 			model: "claude-sonnet-4-20250514",
 			max_tokens: 1024,
 			messages: [{ role: "user", content: prompt }],
 		});
 
+		const duration = performance.now() - startTime;
 		const text =
 			response.content[0].type === "text" ? response.content[0].text : "";
-		return this.parseJSON<GeneratedContent>(text);
+		const result = this.parseJSON<GeneratedContent>(text);
+
+		this.log("info", "Refinement completed", {
+			durationMs: Math.round(duration),
+			responseLength: result.collectionDescription.length,
+		});
+
+		return result;
 	}
 
 	private parseJSON<T>(text: string): T {

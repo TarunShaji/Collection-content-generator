@@ -10,6 +10,7 @@ export async function generateCollectionContent(
 	brandGuidelines: string,
 	sendEvent: SendEvent,
 ): Promise<void> {
+	const startTime = performance.now();
 	console.info("[CollectionController] Generate request started", {
 		collectionUrl,
 		keywordsCount: keywords.length,
@@ -89,6 +90,7 @@ export async function generateCollectionContent(
 		// Step 3: Generate draft with AI
 		await sendEvent("progress", { stage: "generating_draft", message: "Generating SEO draft..." });
 
+		const draftStartTime = performance.now();
 		let draft: GeneratedContent;
 		try {
 			draft = await ai.generateDraft(
@@ -103,6 +105,7 @@ export async function generateCollectionContent(
 		}
 
 		console.info("[CollectionController] Draft generation complete", {
+			durationMs: Math.round(performance.now() - draftStartTime),
 			descriptionLength: draft.collectionDescription.length,
 		});
 
@@ -111,6 +114,7 @@ export async function generateCollectionContent(
 		// Step 4: Humanize the content
 		await sendEvent("progress", { stage: "humanizing", message: "Humanizing content..." });
 
+		const humanizeStartTime = performance.now();
 		let humanized: HumanizedContent;
 		try {
 			humanized = await ai.humanizeContent(draft, keywords, brandGuidelines);
@@ -129,6 +133,7 @@ export async function generateCollectionContent(
 		}
 
 		console.info("[CollectionController] Humanization complete", {
+			durationMs: Math.round(performance.now() - humanizeStartTime),
 			descriptionLength: humanized.collectionDescription.length,
 			changesCount: humanized.changes.length,
 		});
@@ -144,6 +149,7 @@ export async function generateCollectionContent(
 			totalFound: productLinks.length,
 		});
 		console.info("[CollectionController] Generate request finished", {
+			totalDurationMs: Math.round(performance.now() - startTime),
 			collectionUrl,
 			totalFound: productLinks.length,
 			successCount: successful.length,
