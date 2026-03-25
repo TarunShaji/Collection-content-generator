@@ -3,16 +3,13 @@ export interface CollectionSEOSection {
 	content: string;
 }
 
-export interface CollectionSEOContent {
+export interface GeneratedContent {
 	h1: string;
 	intro: string;
-	section1: CollectionSEOSection;
-	section2: CollectionSEOSection;
+	sections: CollectionSEOSection[];
 }
 
-export interface GeneratedContent extends CollectionSEOContent {}
-
-export interface HumanizedContent extends CollectionSEOContent {
+export interface HumanizedContent extends GeneratedContent {
 	changes: string[];
 }
 

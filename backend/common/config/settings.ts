@@ -48,5 +48,6 @@ export const settings = {
 		concurrency: Number(env("SCRAPER_CONCURRENCY")) || 4,
 		pageTimeout: Number(env("SCRAPER_PAGE_TIMEOUT")) || 60000,
 		delayBetweenRequests: Number(env("SCRAPER_DELAY")) || 1500,
+		debugOutput: env("SCRAPER_DEBUG_OUTPUT") === "true",
 	},
 };

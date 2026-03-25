@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import { Sparkles } from "lucide-react";
 import { API_BASE_URL } from "@/common/api/constants";
 import { InputForm } from "../components/InputForm";
+import type { InputFormData } from "../components/InputForm";
 import { ProgressIndicator } from "../components/ProgressIndicator";
 import { ContentOutput } from "../components/ContentOutput";
 import { CrawledProducts } from "../components/CrawledProducts";
@@ -10,7 +11,33 @@ import type {
 	HumanizedContent,
 	CrawlResult,
 	GeneratorStage,
+	CollectionSEOSection,
 } from "../types";
+
+// Normalizes content from the server — handles both the new sections[] format
+// and the legacy section1/section2 format during server transitions.
+function normalizeGenerated(raw: unknown): GeneratedContent {
+	const obj = raw as Record<string, unknown>;
+	if (Array.isArray(obj.sections)) return raw as GeneratedContent;
+	// Migrate old format
+	const sections: CollectionSEOSection[] = [];
+	if (obj.section1) sections.push(obj.section1 as CollectionSEOSection);
+	if (obj.section2) sections.push(obj.section2 as CollectionSEOSection);
+	return { h1: obj.h1 as string, intro: obj.intro as string, sections };
+}
+
+function normalizeHumanized(raw: unknown): HumanizedContent {
+	const base = normalizeGenerated(raw);
+	const obj = raw as Record<string, unknown>;
+	return { ...base, changes: Array.isArray(obj.changes) ? (obj.changes as string[]) : [] };
+}
+
+interface FormMeta {
+	keywords: string;
+	brandGuidelines: string;
+	sectionCount: number;
+	preApprovedContent?: string;
+}
 
 export function GeneratorPage() {
 	const [stage, setStage] = useState<GeneratorStage>("idle");
@@ -25,117 +52,120 @@ export function GeneratorPage() {
 	const [failedUrls, setFailedUrls] = useState<string[]>([]);
 	const [errorMessage, setErrorMessage] = useState("");
 
-	const formDataRef = useRef<{ keywords: string; brandGuidelines: string }>({
+	const formMetaRef = useRef<FormMeta>({
 		keywords: "",
 		brandGuidelines: "",
+		sectionCount: 2,
+		preApprovedContent: undefined,
 	});
 
-	const handleSubmit = useCallback(
-		async (data: { collectionUrl: string; keywords: string; brandGuidelines: string }) => {
-			setIsLoading(true);
-			setStage("crawling_collection");
-			setStatusMessage("Starting...");
-			setDraft(null);
-			setHumanized(null);
-			setCrawledProducts([]);
-			setFailedUrls([]);
-			setErrorMessage("");
-			formDataRef.current = { keywords: data.keywords, brandGuidelines: data.brandGuidelines };
+	const handleSubmit = useCallback(async (data: InputFormData) => {
+		setIsLoading(true);
+		setStage("crawling_collection");
+		setStatusMessage("Starting...");
+		setDraft(null);
+		setHumanized(null);
+		setCrawledProducts([]);
+		setFailedUrls([]);
+		setErrorMessage("");
+		formMetaRef.current = {
+			keywords: data.keywords,
+			brandGuidelines: data.brandGuidelines,
+			sectionCount: data.sectionCount,
+			preApprovedContent: data.preApprovedContent,
+		};
 
-			try {
-				const response = await fetch(`${API_BASE_URL}/collection/generate`, {
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(data),
-				});
+		try {
+			const response = await fetch(`${API_BASE_URL}/collection/generate`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(data),
+			});
 
-				if (!response.ok) {
-					const err = await response.json().catch(() => ({ data: { message: "Request failed" } }));
-					throw new Error(err.data?.message || "Request failed");
-				}
+			if (!response.ok) {
+				const err = await response.json().catch(() => ({ data: { message: "Request failed" } }));
+				throw new Error(err.data?.message || "Request failed");
+			}
 
-				const reader = response.body?.getReader();
-				if (!reader) throw new Error("No response stream");
+			const reader = response.body?.getReader();
+			if (!reader) throw new Error("No response stream");
 
-				const decoder = new TextDecoder();
-				let buffer = "";
+			const decoder = new TextDecoder();
+			let buffer = "";
 
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) break;
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
 
-					buffer += decoder.decode(value, { stream: true });
+				buffer += decoder.decode(value, { stream: true });
 
-					const events = buffer.split("\n\n");
-					buffer = events.pop() || "";
+				const events = buffer.split("\n\n");
+				buffer = events.pop() || "";
 
-					for (const eventBlock of events) {
-						const lines = eventBlock.split("\n");
-						let eventType = "";
-						let eventData = "";
+				for (const eventBlock of events) {
+					const lines = eventBlock.split("\n");
+					let eventType = "";
+					let eventData = "";
 
-						for (const l of lines) {
-							if (l.startsWith("event: ")) eventType = l.slice(7).trim();
-							if (l.startsWith("data: ")) eventData = l.slice(6);
-						}
+					for (const l of lines) {
+						if (l.startsWith("event: ")) eventType = l.slice(7).trim();
+						if (l.startsWith("data: ")) eventData = l.slice(6);
+					}
 
-						if (!eventType || !eventData) continue;
+					if (!eventType || !eventData) continue;
 
-						let parsed: Record<string, unknown>;
-						try {
-							parsed = JSON.parse(eventData);
-						} catch {
-							continue;
-						}
+					let parsed: Record<string, unknown>;
+					try {
+						parsed = JSON.parse(eventData);
+					} catch {
+						continue;
+					}
 
-						switch (eventType) {
-							case "progress": {
-								const s = parsed.stage as GeneratorStage;
-								const message = parsed.message as string;
-								setStage(s);
-								setStatusMessage(message);
-								if (parsed.crawledProducts) {
-									setCrawledProducts(parsed.crawledProducts as CrawlResult[]);
-								}
-								if (parsed.failedUrls) {
-									setFailedUrls(parsed.failedUrls as string[]);
-								}
-								break;
+					switch (eventType) {
+						case "progress": {
+							const s = parsed.stage as GeneratorStage;
+							const message = parsed.message as string;
+							setStage(s);
+							setStatusMessage(message);
+							if (parsed.crawledProducts) {
+								setCrawledProducts(parsed.crawledProducts as CrawlResult[]);
 							}
-							case "draft":
-								setDraft(parsed.draft as GeneratedContent);
-								break;
-							case "humanized":
-								setHumanized(parsed.humanized as HumanizedContent);
-								break;
-							case "complete":
-								setStage("complete");
-								setStatusMessage("Content generated successfully!");
-								if (parsed.draft) setDraft(parsed.draft as GeneratedContent);
-								if (parsed.humanized) setHumanized(parsed.humanized as HumanizedContent);
-								if (parsed.crawledProducts)
-									setCrawledProducts(parsed.crawledProducts as CrawlResult[]);
-								if (parsed.failedUrls) setFailedUrls(parsed.failedUrls as string[]);
-								break;
-							case "error":
-								setStage("error");
-								setStatusMessage(parsed.message as string);
-								setErrorMessage(parsed.message as string);
-								break;
+							if (parsed.failedUrls) {
+								setFailedUrls(parsed.failedUrls as string[]);
+							}
+							break;
 						}
+						case "draft":
+							setDraft(normalizeGenerated(parsed.draft));
+							break;
+						case "humanized":
+							setHumanized(normalizeHumanized(parsed.humanized));
+							break;
+						case "complete":
+							setStage("complete");
+							setStatusMessage("Content generated successfully!");
+							if (parsed.draft) setDraft(normalizeGenerated(parsed.draft));
+							if (parsed.humanized) setHumanized(normalizeHumanized(parsed.humanized));
+							if (parsed.crawledProducts) setCrawledProducts(parsed.crawledProducts as CrawlResult[]);
+							if (parsed.failedUrls) setFailedUrls(parsed.failedUrls as string[]);
+							break;
+						case "error":
+							setStage("error");
+							setStatusMessage(parsed.message as string);
+							setErrorMessage(parsed.message as string);
+							break;
 					}
 				}
-			} catch (err) {
-				const msg = err instanceof Error ? err.message : "An unexpected error occurred";
-				setStage("error");
-				setStatusMessage(msg);
-				setErrorMessage(msg);
-			} finally {
-				setIsLoading(false);
 			}
-		},
-		[],
-	);
+		} catch (err) {
+			const msg = err instanceof Error ? err.message : "An unexpected error occurred";
+			setStage("error");
+			setStatusMessage(msg);
+			setErrorMessage(msg);
+		} finally {
+			setIsLoading(false);
+		}
+	}, []);
 
 	const handleRegenerate = useCallback(async () => {
 		if (!draft) return;
@@ -146,8 +176,10 @@ export function GeneratorPage() {
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({
 					draft,
-					keywords: formDataRef.current.keywords,
-					brandGuidelines: formDataRef.current.brandGuidelines,
+					keywords: formMetaRef.current.keywords,
+					brandGuidelines: formMetaRef.current.brandGuidelines,
+					sectionCount: formMetaRef.current.sectionCount,
+					preApprovedContent: formMetaRef.current.preApprovedContent,
 				}),
 			});
 
@@ -157,7 +189,7 @@ export function GeneratorPage() {
 			}
 
 			const result = await response.json();
-			setHumanized(result.data.humanized);
+			setHumanized(normalizeHumanized(result.data.humanized));
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : "Regeneration failed";
 			setErrorMessage(msg);
@@ -183,12 +215,11 @@ export function GeneratorPage() {
 					currentContent: {
 						h1: humanized.h1,
 						intro: humanized.intro,
-						section1: humanized.section1,
-						section2: humanized.section2,
+						sections: humanized.sections,
 					},
 					feedback,
-					keywords: formDataRef.current.keywords,
-					brandGuidelines: formDataRef.current.brandGuidelines,
+					keywords: formMetaRef.current.keywords,
+					brandGuidelines: formMetaRef.current.brandGuidelines,
 					productDescriptions,
 				}),
 			});
@@ -199,12 +230,9 @@ export function GeneratorPage() {
 			}
 
 			const result = await response.json();
-			const refined = result.data.refined;
+			const refined = normalizeGenerated(result.data.refined);
 			setHumanized({
-				h1: refined.h1,
-				intro: refined.intro,
-				section1: refined.section1,
-				section2: refined.section2,
+				...refined,
 				changes: [`Refined based on feedback: "${feedback}"`],
 			});
 		} catch (err) {

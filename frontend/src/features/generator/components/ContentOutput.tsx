@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Copy, Check, RefreshCw, Loader2, Send } from "lucide-react";
 import { cn } from "@/common/utils/tailwind";
-import type { CollectionSEOContent, GeneratedContent, HumanizedContent } from "../types";
+import type { GeneratedContent, HumanizedContent } from "../types";
 
 interface ContentOutputProps {
 	draft: GeneratedContent;
@@ -14,39 +14,36 @@ interface ContentOutputProps {
 
 type ViewMode = "humanized" | "draft" | "compare";
 
-function flattenContent(content: CollectionSEOContent): string {
+function flattenContent(content: GeneratedContent): string {
 	return [
 		`H1: ${content.h1}`,
 		`Intro: ${content.intro}`,
-		`Section 1 H2: ${content.section1.h2}`,
-		`Section 1 Content: ${content.section1.content}`,
-		`Section 2 H2: ${content.section2.h2}`,
-		`Section 2 Content: ${content.section2.content}`,
+		...(content.sections ?? []).flatMap((s, i) => [
+			`Section ${i + 1} H2: ${s.h2}`,
+			`Section ${i + 1} Content: ${s.content}`,
+		]),
 	].join("\n\n");
 }
 
-function totalLength(content: CollectionSEOContent): number {
-	return [
-		content.h1,
-		content.intro,
-		content.section1.h2,
-		content.section1.content,
-		content.section2.h2,
-		content.section2.content,
-	]
-		.map((v) => v.length)
-		.reduce((a, b) => a + b, 0);
+function totalLength(content: GeneratedContent): number {
+	return (
+		content.h1.length +
+		content.intro.length +
+		(content.sections ?? []).reduce((sum, s) => sum + s.h2.length + s.content.length, 0)
+	);
 }
 
-function StructuredContentView({ content }: { content: CollectionSEOContent }) {
+function StructuredContentView({ content }: { content: GeneratedContent }) {
 	return (
 		<div className="space-y-3">
 			<ContentField label="H1" value={content.h1} />
 			<ContentField label="Intro" value={content.intro} multiline />
-			<ContentField label="Section 1 - H2" value={content.section1.h2} />
-			<ContentField label="Section 1 - Content" value={content.section1.content} multiline />
-			<ContentField label="Section 2 - H2" value={content.section2.h2} />
-			<ContentField label="Section 2 - Content" value={content.section2.content} multiline />
+			{(content.sections ?? []).map((section, i) => (
+				<div key={i} className="space-y-3">
+					<ContentField label={`Section ${i + 1} — H2`} value={section.h2} />
+					<ContentField label={`Section ${i + 1} — Content`} value={section.content} multiline />
+				</div>
+			))}
 		</div>
 	);
 }
@@ -180,9 +177,15 @@ export function ContentOutput({
 				</div>
 			</div>
 
-			<div className="text-xs text-gray-500">Total content length: {totalLength(current)} chars</div>
+			<div className="text-xs text-gray-500">
+				Total content length: {totalLength(current)} chars &nbsp;·&nbsp; {current.sections.length} section{current.sections.length !== 1 ? "s" : ""}
+			</div>
 
-			{viewMode === "compare" ? <CompareView draft={draft} humanized={humanized} /> : <StructuredContentView content={current} />}
+			{viewMode === "compare" ? (
+				<CompareView draft={draft} humanized={humanized} />
+			) : (
+				<StructuredContentView content={current} />
+			)}
 
 			{humanized.changes.length > 0 && (
 				<div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -223,7 +226,7 @@ export function ContentOutput({
 					{[
 						"Make H1 more SEO-focused",
 						"Tighten the intro",
-						"Make section 1 more benefit-led",
+						"Make section headings more benefit-led",
 						"Make tone more premium",
 					].map((suggestion) => (
 						<button

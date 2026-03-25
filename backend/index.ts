@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { requestId } from "hono/request-id";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { HttpError } from "@/common/errors";
 import { errResponse, successResponse } from "@/common/response/helpers";
 import { settings } from "@/common/config/settings";
@@ -20,7 +21,7 @@ app.use(
 
 app.onError((err, c) => {
 	if (err instanceof HttpError) {
-		return errResponse(c, { message: err.message }, err.status);
+		return errResponse(c, { message: err.message }, err.status as ContentfulStatusCode);
 	}
 	console.error("Unhandled error:", err);
 	return errResponse(c, { message: "Internal server error" }, 500);

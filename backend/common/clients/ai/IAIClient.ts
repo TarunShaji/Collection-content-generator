@@ -3,16 +3,13 @@ export interface CollectionSEOSection {
 	content: string;
 }
 
-export interface CollectionSEOContent {
+export interface GeneratedContent {
 	h1: string;
 	intro: string;
-	section1: CollectionSEOSection;
-	section2: CollectionSEOSection;
+	sections: CollectionSEOSection[];
 }
 
-export interface GeneratedContent extends CollectionSEOContent {}
-
-export interface HumanizedContent extends CollectionSEOContent {
+export interface HumanizedContent extends GeneratedContent {
 	changes: string[];
 }
 
@@ -21,12 +18,16 @@ export interface IAIClient {
 		productDescriptions: string[],
 		keywords: string[],
 		brandGuidelines: string,
+		sectionCount: number,
+		preApprovedContent?: string,
 	): Promise<GeneratedContent>;
 
 	humanizeContent(
 		draft: GeneratedContent,
 		keywords: string[],
 		brandGuidelines: string,
+		sectionCount: number,
+		preApprovedContent?: string,
 	): Promise<HumanizedContent>;
 
 	refineContent(

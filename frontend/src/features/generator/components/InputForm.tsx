@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { Globe, Tag, FileText, Loader2 } from "lucide-react";
+import { Globe, Tag, FileText, Loader2, Hash, BookOpen } from "lucide-react";
 import { cn } from "@/common/utils/tailwind";
 
+export interface InputFormData {
+	collectionUrl: string;
+	keywords: string;
+	brandGuidelines: string;
+	sectionCount: number;
+	preApprovedContent?: string;
+}
+
 interface InputFormProps {
-	onSubmit: (data: { collectionUrl: string; keywords: string; brandGuidelines: string }) => void;
+	onSubmit: (data: InputFormData) => void;
 	isLoading: boolean;
 }
 
@@ -11,10 +19,18 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
 	const [collectionUrl, setCollectionUrl] = useState("");
 	const [keywords, setKeywords] = useState("");
 	const [brandGuidelines, setBrandGuidelines] = useState("");
+	const [sectionCount, setSectionCount] = useState(2);
+	const [preApprovedContent, setPreApprovedContent] = useState("");
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
-		onSubmit({ collectionUrl, keywords, brandGuidelines });
+		onSubmit({
+			collectionUrl,
+			keywords,
+			brandGuidelines,
+			sectionCount,
+			preApprovedContent: preApprovedContent.trim() || undefined,
+		});
 	};
 
 	return (
@@ -49,7 +65,7 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
 					onChange={(e) => setKeywords(e.target.value)}
 					className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-shadow placeholder:text-gray-400"
 				/>
-				<p className="mt-1 text-xs text-gray-500">Comma-separated list. First keyword is treated as the primary keyword.</p>
+				<p className="mt-1 text-xs text-gray-500">Comma-separated. First keyword is treated as the primary keyword.</p>
 			</div>
 
 			<div>
@@ -66,6 +82,43 @@ export function InputForm({ onSubmit, isLoading }: InputFormProps) {
 					onChange={(e) => setBrandGuidelines(e.target.value)}
 					className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-shadow resize-y placeholder:text-gray-400"
 				/>
+			</div>
+
+			<div>
+				<label htmlFor="sectionCount" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+					<Hash className="w-4 h-4 text-gray-400" />
+					Number of H2 Sections
+				</label>
+				<input
+					id="sectionCount"
+					type="number"
+					min={1}
+					max={10}
+					value={sectionCount}
+					onChange={(e) => {
+						const v = Math.min(10, Math.max(1, Number(e.target.value) || 1));
+						setSectionCount(v);
+					}}
+					className="w-24 px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-center font-medium focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-shadow"
+				/>
+				<p className="mt-1 text-xs text-gray-500">How many H2 subheadings to generate (1–10). Default is 2.</p>
+			</div>
+
+			<div>
+				<label htmlFor="preApproved" className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-1.5">
+					<BookOpen className="w-4 h-4 text-gray-400" />
+					Pre-Approved Content
+					<span className="text-xs font-normal text-gray-400">(optional)</span>
+				</label>
+				<textarea
+					id="preApproved"
+					rows={3}
+					placeholder="Paste any pre-approved copy, taglines, or messaging that must be incorporated verbatim..."
+					value={preApprovedContent}
+					onChange={(e) => setPreApprovedContent(e.target.value)}
+					className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-shadow resize-y placeholder:text-gray-400"
+				/>
+				<p className="mt-1 text-xs text-gray-500">Brand-approved phrases or copy the AI must incorporate faithfully.</p>
 			</div>
 
 			<button

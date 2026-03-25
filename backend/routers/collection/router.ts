@@ -17,8 +17,8 @@ const validate = (schema: ZodSchema) =>
 const router = new Hono();
 
 router.post("/generate", validate(GenerateSchema), async (c) => {
-	const { collectionUrl, keywords, brandGuidelines } = c.req.valid("json");
-	const keywordList = keywords.split(",").map((k) => k.trim()).filter(Boolean);
+	const { collectionUrl, keywords, brandGuidelines, sectionCount, preApprovedContent } = c.req.valid("json");
+	const keywordList = keywords.split(",").map((k: string) => k.trim()).filter(Boolean);
 
 	return streamSSE(c, async (stream) => {
 		const sendEvent = async (type: string, data: unknown) => {
@@ -29,7 +29,14 @@ router.post("/generate", validate(GenerateSchema), async (c) => {
 		};
 
 		try {
-			await generateCollectionContent(collectionUrl, keywordList, brandGuidelines, sendEvent);
+			await generateCollectionContent(
+				collectionUrl,
+				keywordList,
+				brandGuidelines,
+				sectionCount,
+				preApprovedContent,
+				sendEvent,
+			);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "Unknown error";
 			console.error("SSE stream error:", message);
@@ -39,11 +46,11 @@ router.post("/generate", validate(GenerateSchema), async (c) => {
 });
 
 router.post("/regenerate", validate(RegenerateSchema), async (c) => {
-	const { draft, keywords, brandGuidelines } = c.req.valid("json");
-	const keywordList = keywords.split(",").map((k) => k.trim()).filter(Boolean);
+	const { draft, keywords, brandGuidelines, sectionCount, preApprovedContent } = c.req.valid("json");
+	const keywordList = keywords.split(",").map((k: string) => k.trim()).filter(Boolean);
 
 	try {
-		const humanized = await regenerateHumanized(draft, keywordList, brandGuidelines);
+		const humanized = await regenerateHumanized(draft, keywordList, brandGuidelines, sectionCount, preApprovedContent);
 		return successResponse(c, { humanized });
 	} catch (err) {
 		const message = err instanceof Error ? err.message : "Unknown error";
@@ -53,7 +60,7 @@ router.post("/regenerate", validate(RegenerateSchema), async (c) => {
 
 router.post("/refine", validate(RefineSchema), async (c) => {
 	const { currentContent, feedback, keywords, brandGuidelines, productDescriptions } = c.req.valid("json");
-	const keywordList = keywords.split(",").map((k) => k.trim()).filter(Boolean);
+	const keywordList = keywords.split(",").map((k: string) => k.trim()).filter(Boolean);
 
 	try {
 		const refined = await refineContent(currentContent, feedback, keywordList, brandGuidelines, productDescriptions);

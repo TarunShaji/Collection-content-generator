@@ -5,22 +5,16 @@ import type { GeneratedContent, HumanizedContent } from "@/common/clients/ai/IAI
 type SendEvent = (type: string, data: unknown) => Promise<void>;
 
 function contentTotalLength(content: GeneratedContent): number {
-	return [
-		content.h1,
-		content.intro,
-		content.section1.h2,
-		content.section1.content,
-		content.section2.h2,
-		content.section2.content,
-	]
-		.map((v) => v.length)
-		.reduce((a, b) => a + b, 0);
+	const base = content.h1.length + content.intro.length;
+	return base + content.sections.reduce((sum, s) => sum + s.h2.length + s.content.length, 0);
 }
 
 export async function generateCollectionContent(
 	collectionUrl: string,
 	keywords: string[],
 	brandGuidelines: string,
+	sectionCount: number,
+	preApprovedContent: string | undefined,
 	sendEvent: SendEvent,
 ): Promise<void> {
 	const startTime = performance.now();
@@ -28,6 +22,8 @@ export async function generateCollectionContent(
 		collectionUrl,
 		keywordsCount: keywords.length,
 		hasBrandGuidelines: Boolean(brandGuidelines?.trim()),
+		sectionCount,
+		hasPreApprovedContent: Boolean(preApprovedContent?.trim()),
 	});
 
 	const scraper = createScraperClient();
@@ -110,6 +106,8 @@ export async function generateCollectionContent(
 				successful.map((r) => r.description),
 				keywords,
 				brandGuidelines,
+				sectionCount,
+				preApprovedContent,
 			);
 		} catch (err) {
 			const message = err instanceof Error ? err.message : "Unknown error";
@@ -120,8 +118,7 @@ export async function generateCollectionContent(
 		console.info("[CollectionController] Draft generation complete", {
 			durationMs: Math.round(performance.now() - draftStartTime),
 			totalLength: contentTotalLength(draft),
-			h1Length: draft.h1.length,
-			introLength: draft.intro.length,
+			sectionsGenerated: draft.sections.length,
 		});
 
 		await sendEvent("draft", { draft });
@@ -132,9 +129,8 @@ export async function generateCollectionContent(
 		const humanizeStartTime = performance.now();
 		let humanized: HumanizedContent;
 		try {
-			humanized = await ai.humanizeContent(draft, keywords, brandGuidelines);
+			humanized = await ai.humanizeContent(draft, keywords, brandGuidelines, sectionCount, preApprovedContent);
 		} catch (_err) {
-			// Fallback: show draft if humanizer fails
 			const fallbackHumanized = { ...draft, changes: ["Humanization failed — showing original draft"] };
 			await sendEvent("humanized", { humanized: fallbackHumanized, fallback: true });
 			await sendEvent("complete", {
@@ -163,6 +159,7 @@ export async function generateCollectionContent(
 			failedUrls: failed.map((f) => f.url),
 			totalFound: productLinks.length,
 		});
+
 		console.info("[CollectionController] Generate request finished", {
 			totalDurationMs: Math.round(performance.now() - startTime),
 			collectionUrl,
@@ -179,9 +176,11 @@ export async function regenerateHumanized(
 	draft: GeneratedContent,
 	keywords: string[],
 	brandGuidelines: string,
+	sectionCount: number,
+	preApprovedContent: string | undefined,
 ): Promise<HumanizedContent> {
 	const ai = createAIClient();
-	return ai.humanizeContent(draft, keywords, brandGuidelines);
+	return ai.humanizeContent(draft, keywords, brandGuidelines, sectionCount, preApprovedContent);
 }
 
 export async function refineContent(
