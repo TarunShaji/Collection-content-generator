@@ -63,13 +63,32 @@ function CompareView({ draft, humanized }: { draft: GeneratedContent; humanized:
 	);
 }
 
+async function copyToClipboard(text: string): Promise<void> {
+	if (navigator.clipboard?.writeText) {
+		await navigator.clipboard.writeText(text);
+	} else {
+		const el = document.createElement("textarea");
+		el.value = text;
+		el.style.position = "fixed";
+		el.style.opacity = "0";
+		document.body.appendChild(el);
+		el.select();
+		document.execCommand("copy");
+		document.body.removeChild(el);
+	}
+}
+
 function ContentField({ label, value, multiline = false }: { label: string; value: string; multiline?: boolean }) {
 	const [copied, setCopied] = useState(false);
 
 	const handleCopy = async () => {
-		await navigator.clipboard.writeText(value);
-		setCopied(true);
-		setTimeout(() => setCopied(false), 2000);
+		try {
+			await copyToClipboard(value);
+			setCopied(true);
+			setTimeout(() => setCopied(false), 2000);
+		} catch {
+			// ignore
+		}
 	};
 
 	return (
@@ -132,9 +151,13 @@ export function ContentOutput({
 	};
 
 	const handleCopyAll = async () => {
-		await navigator.clipboard.writeText(flattenContent(current));
-		setCopiedAll(true);
-		setTimeout(() => setCopiedAll(false), 2000);
+		try {
+			await copyToClipboard(flattenContent(current));
+			setCopiedAll(true);
+			setTimeout(() => setCopiedAll(false), 2000);
+		} catch {
+			// ignore
+		}
 	};
 
 	return (
