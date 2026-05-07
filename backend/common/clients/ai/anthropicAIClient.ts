@@ -67,15 +67,30 @@ class AnthropicAIClient implements IAIClient {
 	 * based on how many sections are requested.
 	 */
 	private buildStructureBlock(sectionCount: number): { requirements: string; exampleJson: string } {
+		// Themes map to common SERP intent patterns; sections beyond the list get a generic fallback.
+		const sectionThemes = [
+			"product attributes (materials, construction, format, or key differentiators supported by product data)",
+			"use case or lifestyle (how, when, or who the product is for — supported by product data)",
+			"fit, sizing, versatility, or range (how the product adapts to different needs — supported by product data)",
+			"care, quality, or craftsmanship (durability, finish, or construction details — supported by product data)",
+		];
+
+		const getSectionTheme = (i: number): string =>
+			i < sectionThemes.length
+				? sectionThemes[i]
+				: "a clearly distinct supporting theme not already covered in any previous section";
+
 		const sectionLines = Array.from(
 			{ length: sectionCount },
 			(_, i) =>
-				`  Section ${i + 1}:\n    h2: subheading focused on a distinct value or theme, 30-60 characters.\n    content: 1 supporting paragraph, 180-320 characters.`,
+				`  Section ${i + 1}:\n    h2: 30–60 characters. Focus on ${getSectionTheme(i)}.\n    content: 180–320 characters.`,
 		).join("\n");
 
-		const requirements = `- h1: collection SEO title, 40-70 characters.
-- intro: 1 strong opening paragraph, 220-360 characters.
-- sections: array of EXACTLY ${sectionCount} object(s). You MUST write all ${sectionCount}. Do not stop early.
+		const requirements = `h1: 40–70 characters. Must include primary keyword.
+
+intro: 1 opening paragraph, 220–360 characters. Must include primary keyword. Establish brand identity and product range clearly.
+
+sections: array of EXACTLY ${sectionCount} object(s). You MUST write all ${sectionCount}. Do not stop early.
 ${sectionLines}`;
 
 		// Label each slot explicitly so the model can count them
@@ -91,7 +106,7 @@ ${sectionLines}`;
 	/** If pre-approved content was provided, return a prompt block for it. */
 	private buildPreApprovedBlock(preApprovedContent?: string): string {
 		if (!preApprovedContent?.trim()) return "";
-		return `\n## Pre-Approved Content (incorporate faithfully — preserve key phrases and messaging verbatim where possible):\n${preApprovedContent.trim()}\n`;
+		return `\n## Pre-Approved Content (reference only — do not reuse or mirror phrasing):\n${preApprovedContent.trim()}\n`;
 	}
 
 	// ── Public methods ─────────────────────────────────────────────────────────
@@ -108,9 +123,11 @@ ${sectionLines}`;
 		const { requirements, exampleJson } = this.buildStructureBlock(sectionCount);
 		const preApprovedBlock = this.buildPreApprovedBlock(preApprovedContent);
 
-		const prompt = `You are an expert ecommerce SEO strategist and copywriter.
+		const prompt = `You are an expert ecommerce SEO strategist and copywriter specializing in collection page content for D2C brands.
 
-Your task: generate structured SEO content for a collection page from product descriptions.
+Your task: generate structured SEO content for a collection page that ranks in both traditional search and AI-powered discovery (LLMs, AI Overviews, Perplexity, ChatGPT).
+
+---
 
 ## Product Descriptions from this Collection:
 ${descriptionsText}
@@ -120,21 +137,40 @@ ${keywords.join(", ")}
 
 ## Brand Guidelines:
 ${brandGuidelines}
-${preApprovedBlock}
+${preApprovedBlock}---
+
+FACT ACCURACY RULES (highest priority):
+- Every claim must be directly supported by the product descriptions above.
+- Do not infer, assume, or embellish. If a product description does not mention a material, construction detail, or feature, do not include it.
+- Do not use vague superlatives ("best", "most", "unmatched") unless explicitly supported by product data.
+- Synthesize across all products. Do not copy any single product description.
+- If product data is sparse, write fewer claims — do not pad with generic filler.
+
+CONTENT STRATEGY RULES (for AI citation + SERP coverage):
+- Write content that serves both first-time discovery intent and returning brand-aware shoppers. Prioritize clarity and specificity over broad generalizations.
+- Use clear, declarative sentences. Avoid vague or poetic language.
+- Name specific attributes (materials, formats, use cases, sizing, certifications) where supported by product data.
+- Be general enough to serve first-time discovery intent, while reinforcing brand-specific differentiators.
+- Structure content so each sentence could stand alone as a citable fact.
+
+BRAND + SEO RULES:
+- Use primary keyword in H1 and intro paragraph naturally.
+- Use secondary keywords across sections without forcing them.
+- Each section must cover a clearly distinct, non-overlapping theme.
+- Reflect real search behavior in headings — informational, not salesy.
+- Support browsing intent by reinforcing range and variety where product data supports it.
+- Tone must match brand guidelines strictly.
+
+---
+
 ## Structure Requirements:
 ${requirements}
 
-## Quality Rules:
-1. Synthesize across all products; do not copy one product verbatim.
-2. Place primary keyword naturally in h1 or intro.
-3. Use natural SEO language with clear value proposition.
-4. Each section h2 must cover a distinct theme — no overlap.
-5. Follow brand voice strictly.
-6. Keep output concise and publication-ready.
-
 ## Output Format:
-Respond with ONLY valid JSON (no markdown, no code fences) in this exact shape:
-${exampleJson}`;
+Respond with ONLY valid JSON (no markdown, no code fences):
+${exampleJson}
+
+CRITICAL: Output EXACTLY ${sectionCount} section objects. No more, no less.`;
 
 		const maxTokens = Math.min(800 + sectionCount * 350, 4000);
 
